@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Claude Code Devcontainer CLI Helper
+# AI coding agent devcontainer CLI helper
 # Provides the `devc` command for managing devcontainers
 
 # Resolve symlinks to get actual script location
@@ -35,7 +35,7 @@ Commands:
     update              Update devc to the latest version
     template [dir]      Copy devcontainer template to directory (default: current)
     exec <cmd>          Execute a command in the running container
-    upgrade             Upgrade Claude Code to latest version
+    upgrade [agent]     Upgrade agent CLI(s): claude, codex, or all (default: all)
     mount <host> <cont> Add a mount to the devcontainer (recreates container)
     sync [project] [--trusted]  Sync sessions from devcontainers to host
     cp <cont> <host>    Copy files/directories from container to host
@@ -50,7 +50,8 @@ Examples:
     devc self-install           # Install devc to PATH
     devc update                 # Update to latest version
     devc exec ls -la            # Run command in container
-    devc upgrade                # Upgrade Claude Code to latest
+    devc upgrade                # Upgrade Claude Code and Codex to latest
+    devc upgrade codex          # Upgrade only Codex
     devc mount ~/data /data     # Add mount to container
     devc sync                   # Sync sessions from all devcontainers
     devc sync crypto            # Sync only matching devcontainer
@@ -124,6 +125,7 @@ extract_mounts_to_file() {
       select(
         (contains("target=/commandhistory,") | not) and
         (contains("target=/home/vscode/.claude,") | not) and
+        (contains("target=/home/vscode/.codex,") | not) and
         (contains("target=/home/vscode/.config/gh,") | not) and
         (contains("target=/home/vscode/.gitconfig,") | not) and
         (contains("target=/workspace/.devcontainer,") | not)
@@ -289,13 +291,30 @@ cmd_exec() {
 cmd_upgrade() {
   local workspace_folder
   workspace_folder="$(get_workspace_folder)"
+  local target="${1:-all}"
+
+  case "$target" in
+  claude | codex | all)
+    ;;
+  *)
+    log_error "Usage: devc upgrade [claude|codex|all]"
+    exit 1
+    ;;
+  esac
 
   check_devcontainer_cli
-  log_info "Upgrading Claude Code..."
 
-  devcontainer exec --workspace-folder "$workspace_folder" claude update
+  if [[ "$target" == "claude" || "$target" == "all" ]]; then
+    log_info "Upgrading Claude Code..."
+    devcontainer exec --workspace-folder "$workspace_folder" claude update
+    log_success "Claude Code upgraded"
+  fi
 
-  log_success "Claude Code upgraded"
+  if [[ "$target" == "codex" || "$target" == "all" ]]; then
+    log_info "Upgrading Codex..."
+    devcontainer exec --workspace-folder "$workspace_folder" codex update
+    log_success "Codex upgraded"
+  fi
 }
 
 cmd_mount() {
@@ -825,7 +844,7 @@ main() {
     cmd_exec "$@"
     ;;
   upgrade)
-    cmd_upgrade
+    cmd_upgrade "$@"
     ;;
   mount)
     cmd_mount "$@"

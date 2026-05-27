@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Post-install configuration for Claude Code devcontainer.
+"""Post-install configuration for AI coding agent devcontainer.
 
 Runs on container creation to set up:
 - Onboarding bypass (when CLAUDE_CODE_OAUTH_TOKEN is set)
 - Claude settings (bypassPermissions mode)
+- Codex settings and optional headless auth
 - Tmux configuration (200k history, mouse support)
 - Directory ownership fixes for mounted volumes
 """
@@ -35,7 +36,7 @@ def setup_onboarding_bypass():
         )
         return
 
-    # When `CLAUDE_CONFIG_DIR` is set, as is done in `devcontainer.json`, `claude` unexpectedly 
+    # When `CLAUDE_CONFIG_DIR` is set, as is done in `devcontainer.json`, `claude` unexpectedly
     # looks for `.claude.json` in *that* folder, instead of in `~`, contradicting the documentation.
     #  See https://github.com/anthropics/claude-code/issues/3833#issuecomment-3694918874
     claude_json_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home()))
@@ -118,6 +119,129 @@ def setup_claude_settings():
     )
 
 
+def has_top_level_toml_key(text: str, key: str) -> bool:
+    """Return whether a TOML document has a top-level key."""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("["):
+            return False
+        if stripped.startswith(f"{key} ") or stripped.startswith(f"{key}="):
+            return True
+    return False
+
+
+def insert_top_level_toml_defaults(text: str, defaults: dict[str, str]) -> str:
+    """Insert missing top-level TOML defaults before the first table."""
+    missing = {
+        key: value
+        for key, value in defaults.items()
+        if not has_top_level_toml_key(text, key)
+    }
+    if not missing:
+        return text
+
+    default_lines = [
+        "# Container defaults: the devcontainer is the sandbox boundary.",
+        *[f'{key} = "{value}"' for key, value in missing.items()],
+    ]
+
+    lines = text.splitlines()
+    insert_at = len(lines)
+    for index, line in enumerate(lines):
+        if line.strip().startswith("["):
+            insert_at = index
+            break
+
+    if insert_at == 0:
+        lines = default_lines + [""] + lines
+    elif insert_at == len(lines):
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.extend(default_lines)
+    else:
+        lines = lines[:insert_at] + default_lines + [""] + lines[insert_at:]
+
+    return "\n".join(lines) + "\n"
+
+
+def setup_codex_settings():
+    """Configure Codex CLI for the externally sandboxed devcontainer."""
+    codex_home = Path(os.environ.get("CODEX_HOME", Path.home() / ".codex"))
+    codex_home.mkdir(parents=True, exist_ok=True)
+
+    config_file = codex_home / "config.toml"
+    defaults = {
+        "approval_policy": "never",
+        "sandbox_mode": "danger-full-access",
+        "cli_auth_credentials_store": "file",
+    }
+
+    existing = config_file.read_text(encoding="utf-8") if config_file.exists() else ""
+    updated = insert_top_level_toml_defaults(existing, defaults)
+
+    if updated != existing:
+        config_file.write_text(updated, encoding="utf-8")
+        print(
+            f"[post_install] Codex settings configured: {config_file}",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"[post_install] Codex settings already configured: {config_file}",
+            file=sys.stderr,
+        )
+
+
+def setup_codex_auth():
+    """Persist Codex auth when a headless token or API key is provided."""
+    access_token = os.environ.get("CODEX_ACCESS_TOKEN", "").strip()
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if access_token:
+        run_codex_login("--with-access-token", access_token, "CODEX_ACCESS_TOKEN")
+    elif api_key:
+        run_codex_login("--with-api-key", api_key, "OPENAI_API_KEY")
+    else:
+        print(
+            "[post_install] No Codex auth env var set, skipping Codex login",
+            file=sys.stderr,
+        )
+
+
+def run_codex_login(flag: str, secret: str, source_name: str):
+    """Run codex login without printing credential material."""
+    print(f"[post_install] Running codex login from {source_name}...", file=sys.stderr)
+    try:
+        result = subprocess.run(
+            ["codex", "login", flag],
+            input=secret,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        print("[post_install] Warning: codex login timed out", file=sys.stderr)
+        return
+    except (FileNotFoundError, OSError) as e:
+        print(
+            f"[post_install] Warning: could not run codex ({e}) - Codex login skipped",
+            file=sys.stderr,
+        )
+        return
+
+    if result.returncode != 0:
+        print(
+            f"[post_install] Warning: codex login exited {result.returncode}; "
+            "Codex auth was not persisted",
+            file=sys.stderr,
+        )
+        return
+
+    print("[post_install] Codex auth configured", file=sys.stderr)
+
+
 def setup_tmux_config():
     """Configure tmux with 200k history, mouse support, and vi keys."""
     tmux_conf = Path.home() / ".tmux.conf"
@@ -172,6 +296,7 @@ def fix_directory_ownership():
 
     dirs_to_fix = [
         Path.home() / ".claude",
+        Path.home() / ".codex",
         Path("/commandhistory"),
         Path.home() / ".config" / "gh",
     ]
@@ -214,8 +339,9 @@ def setup_global_gitignore():
 
     # Create global gitignore with common patterns
     patterns = """\
-# Claude Code
+# Agent CLIs
 .claude/
+.codex/
 
 # macOS
 .DS_Store
@@ -296,10 +422,12 @@ def main():
     """Run all post-install configuration."""
     print("[post_install] Starting post-install configuration...", file=sys.stderr)
 
+    fix_directory_ownership()
     setup_onboarding_bypass()
     setup_claude_settings()
+    setup_codex_settings()
+    setup_codex_auth()
     setup_tmux_config()
-    fix_directory_ownership()
     setup_global_gitignore()
 
     print("[post_install] Configuration complete!", file=sys.stderr)

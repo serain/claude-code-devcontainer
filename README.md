@@ -1,16 +1,16 @@
-# Claude Code in a devcontainer
+# Claude Code and Codex in a devcontainer
 
-A sandboxed development environment for running Claude Code with `bypassPermissions` safely enabled. Built at [Trail of Bits](https://www.trailofbits.com/) for security audit workflows.
+A sandboxed development environment for running Claude Code and OpenAI Codex CLI with their low-friction agent modes enabled. Built at [Trail of Bits](https://www.trailofbits.com/) for security audit workflows.
 
 ## Why Use This?
 
-Running Claude with `bypassPermissions` on your host machine is risky—it can execute any command without confirmation. This devcontainer provides **filesystem isolation** so you get the productivity benefits of unrestricted Claude without risking your host system.
+Running coding agents with unrestricted command execution on your host machine is risky. Claude Code `bypassPermissions` and Codex `danger-full-access` can execute commands, install packages, and modify files without stopping for confirmation. This devcontainer provides **filesystem isolation** so the agent can work freely inside `/workspace` without getting broad access to your host.
 
 **Designed for:**
 
 - **Security audits**: Review client code without risking your host
 - **Untrusted repositories**: Explore unknown codebases safely
-- **Experimental work**: Let Claude modify code freely in isolation
+- **Experimental work**: Let agents modify code freely in isolation
 - **Multi-repo engagements**: Work on multiple related repositories
 
 ## Prerequisites
@@ -74,6 +74,10 @@ git clone <untrusted-repo>
 cd untrusted-repo
 devc .          # Installs template + starts container
 devc shell      # Opens shell in container
+
+# Inside container:
+claude          # Claude Code
+codex           # OpenAI Codex CLI
 ```
 
 **VS Code / Cursor:**
@@ -111,10 +115,14 @@ devc shell      # Opens shell in container
 git clone <client-repo-1>
 git clone <client-repo-2>
 cd client-repo-1
-claude          # Ready to work
+codex           # or: claude
 ```
 
-## Token-Based Auth (Headless)
+## Authentication
+
+### Claude Code
+
+Interactive Claude login works normally inside the container.
 
 For headless servers or to skip the interactive login wizard:
 
@@ -128,45 +136,66 @@ The token is forwarded into the container. On each container creation, `post_ins
 
 This works around Claude Code's interactive onboarding wizard always showing in containers, even with valid credentials ([#8938](https://github.com/anthropics/claude-code/issues/8938)).
 
-If you don't set a token, the interactive login flow works as before.
+### Codex
+
+Interactive Codex login works normally inside the container:
+
+```bash
+codex
+```
+
+Codex will prompt you to sign in with ChatGPT or an API key. Its auth and config are stored in the persistent `~/.codex` volume.
+
+The container also adds the Trail of Bits Codex plugin marketplace with `codex plugin marketplace add trailofbits/skills`.
+
+For headless use, export one of these on the host before creating or rebuilding the container:
+
+```bash
+export CODEX_ACCESS_TOKEN=<codex-access-token>
+# or
+export OPENAI_API_KEY=<openai-api-key>
+devc rebuild
+```
+
+If both are set, `CODEX_ACCESS_TOKEN` wins. `post_install.py` persists the credential with `codex login --with-access-token` or `codex login --with-api-key`.
 
 ## CLI Helper Commands
 
 ```
-devc .              Install template + start container in current directory
-devc up             Start the devcontainer
-devc rebuild        Rebuild container (preserves persistent volumes)
-devc destroy [-f]   Remove container, volumes, and image for current project
-devc down           Stop the container
-devc shell          Open zsh shell in container
-devc exec CMD       Execute command inside the container
-devc upgrade        Upgrade Claude Code in the container
-devc mount SRC DST  Add a bind mount (host → container)
-devc sync [NAME]    Sync Claude Code sessions from devcontainers to host
-devc template DIR   Copy devcontainer files to directory
-devc self-install   Install devc to ~/.local/bin
+devc .                         Install template + start container in current directory
+devc up                        Start the devcontainer
+devc rebuild                   Rebuild container (preserves persistent volumes)
+devc destroy [-f]              Remove container, volumes, and image for current project
+devc down                      Stop the container
+devc shell                     Open zsh shell in container
+devc exec CMD                  Execute command inside the container
+devc upgrade [claude|codex|all] Upgrade agent CLI(s), defaults to all
+devc mount SRC DST             Add a bind mount (host -> container)
+devc sync [NAME]               Sync Claude Code sessions from devcontainers to host
+devc template DIR              Copy devcontainer files to directory
+devc self-install              Install devc to ~/.local/bin
 ```
 
 > **Note:** Use `devc destroy` to clean up a project's Docker resources. Removing containers manually (e.g., `docker rm`) will leave orphaned volumes and images behind that `devc destroy` won't be able to find.
 
-## Session Sync for `/insights`
+## Claude Session Sync for `/insights`
 
 Claude Code's `/insights` command analyzes your session history, but it only reads from `~/.claude/projects/` on the host. Sessions inside devcontainer volumes are invisible to it.
 
-`devc sync` copies session logs from all devcontainers (running and stopped) to the host so `/insights` can include them:
+`devc sync` copies Claude session logs from all devcontainers (running and stopped) to the host so `/insights` can include them:
 
 ```bash
 devc sync              # Sync all devcontainers
 devc sync crypto       # Filter by project name (substring match)
 ```
 
-Devcontainers are auto-discovered via Docker labels — no need to know container names or IDs. The sync is incremental, so it's safe to run repeatedly.
+Devcontainers are auto-discovered via Docker labels. The sync is incremental, so it's safe to run repeatedly.
 
 ## File Sharing
 
 ### VS Code / Cursor
 
-Drag files from your host into the VS Code Explorer panel — they are copied into `/workspace/` automatically. No configuration needed.
+Drag files from your host into the VS Code Explorer panel. They are copied into `/workspace/` automatically.
 
 ### Terminal: `devc mount`
 
@@ -193,10 +222,13 @@ By default, containers have full outbound network access. For stricter security,
 - Auditing software with telemetry or phone-home behavior
 - Maximum isolation for highly sensitive reviews
 
-### Example: Claude + GitHub + Package Registries
+### Example: Agents + GitHub + Package Registries
 
 ```bash
 sudo iptables -A OUTPUT -d api.anthropic.com -j ACCEPT
+sudo iptables -A OUTPUT -d api.openai.com -j ACCEPT
+sudo iptables -A OUTPUT -d chatgpt.com -j ACCEPT
+sudo iptables -A OUTPUT -d auth.openai.com -j ACCEPT
 sudo iptables -A OUTPUT -d github.com -j ACCEPT
 sudo iptables -A OUTPUT -d raw.githubusercontent.com -j ACCEPT
 sudo iptables -A OUTPUT -d registry.npmjs.org -j ACCEPT
@@ -214,9 +246,16 @@ sudo iptables -A OUTPUT -j DROP
 
 ## Threat Model
 
-The primary threat this project addresses is **Claude Code running arbitrary commands on your host machine**. When `bypassPermissions` is enabled, Claude executes shell commands, installs packages, and modifies files without confirmation. On a host machine this means it can modify your shell config, `rm -rf` outside the project directory, or abuse locally stored credentials. The devcontainer confines all of that to a disposable container where the blast radius is limited to `/workspace`.
+The primary threat this project addresses is **coding agents running arbitrary commands on your host machine**. On a host machine, unrestricted agent modes can modify your shell config, delete files outside the project directory, or abuse locally stored credentials. The devcontainer confines that activity to a disposable container where the blast radius is limited to `/workspace` and any explicit mounts you add.
 
-The container includes common development tooling so you can do all development work inside it - not just run Claude. The intended workflow is: clone a repository, start the devcontainer, and work entirely within it. If your project needs additional runtimes or tools beyond what's included, either add them to the Dockerfile for repeated use or install them ad-hoc with `devc exec`.
+The container auto-configures:
+
+- Claude Code `permissions.defaultMode = bypassPermissions`
+- Codex `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`
+
+This would be risky on a host machine, but the container itself is the sandbox.
+
+The container includes common development tooling so you can do all development work inside it - not just run agents. The intended workflow is: clone a repository, start the devcontainer, and work entirely within it. If your project needs additional runtimes or tools beyond what's included, either add them to the Dockerfile for repeated use or install them ad-hoc with `devc exec`.
 
 For the specific boundaries of what is and isn't isolated, see [Security Model](#security-model) below. One nuance worth calling out: the devcontainer runtime automatically forwards your host's SSH agent socket (`SSH_AUTH_SOCK`) into the container. This lets code inside the container authenticate as you over SSH (e.g., `git push`), but the actual private key material stays on the host and is never exposed to the container.
 
@@ -224,11 +263,9 @@ For the specific boundaries of what is and isn't isolated, see [Security Model](
 
 This devcontainer provides **filesystem isolation** but not complete sandboxing.
 
-**Sandboxed:** Filesystem (host files inaccessible), processes (isolated from host), package installations (stay in container)
+**Sandboxed:** Filesystem (host files inaccessible except explicit mounts), processes (isolated from host), package installations (stay in container)
 
-**Not sandboxed:** Network (full outbound by default—see [Network Isolation](#network-isolation)), git identity (`~/.gitconfig` mounted read-only), SSH agent (socket forwarded, keys stay on host), Docker socket (not mounted by default)
-
-The container auto-configures `bypassPermissions` mode—Claude runs commands without confirmation. This would be risky on a host machine, but the container itself is the sandbox.
+**Not sandboxed:** Network (full outbound by default - see [Network Isolation](#network-isolation)), git identity (`~/.gitconfig` mounted read-only), SSH agent (socket forwarded, keys stay on host), Docker socket (not mounted by default)
 
 ## Container Details
 
@@ -236,12 +273,13 @@ The container auto-configures `bypassPermissions` mode—Claude runs commands wi
 |-----------|---------|
 | Base | Ubuntu 24.04, Node.js 22, Python 3.13 + uv, zsh |
 | User | `vscode` (passwordless sudo), working dir `/workspace` |
+| Agent CLIs | Claude Code, OpenAI Codex CLI |
 | Tools | `rg`, `fd`, `tmux`, `fzf`, `delta`, `iptables`, `ipset` |
-| Volumes (survive rebuilds) | Command history (`/commandhistory`), Claude config (`~/.claude`), GitHub CLI auth (`~/.config/gh`) |
+| Volumes (survive rebuilds) | Command history (`/commandhistory`), Claude config (`~/.claude`), Codex config/auth (`~/.codex`), GitHub CLI auth (`~/.config/gh`) |
 | Host mounts | `~/.gitconfig` (read-only), `.devcontainer/` (read-only) |
-| Auto-configured | [anthropics](https://github.com/anthropics/claude-code-plugins) + [trailofbits](https://github.com/trailofbits/claude-code-plugins) skills, git-delta |
+| Auto-configured | Claude skills, Codex Trail of Bits marketplace, Claude `bypassPermissions`, Codex no-approval `danger-full-access`, git-delta |
 
-Volumes are stored outside the container, so your shell history, Claude settings, and `gh` login persist even after `devc rebuild`. Host `~/.gitconfig` is mounted read-only for git identity.
+Volumes are stored outside the container, so your shell history, agent settings, and `gh` login persist even after `devc rebuild`. Host `~/.gitconfig` is mounted read-only for git identity.
 
 ## Troubleshooting
 
@@ -256,6 +294,16 @@ npm install -g @devcontainers/cli
 1. Check Docker is running
 2. Try rebuilding: `devc rebuild`
 3. Check logs: `docker logs $(docker ps -lq)`
+
+### Codex auth not working
+
+Check the login status inside the container:
+
+```bash
+codex login status
+```
+
+For a headless container, confirm `CODEX_ACCESS_TOKEN` or `OPENAI_API_KEY` is set on the host, then run `devc rebuild`.
 
 ### GitHub CLI auth not persisting
 
