@@ -1,7 +1,7 @@
 # AI Coding Agent Devcontainer
 # Based on Microsoft devcontainer image for better devcontainer integration
-FROM ghcr.io/astral-sh/uv:0.10@sha256:10902f58a1606787602f303954cea099626a4adb02acbac4c69920fe9d278f82 AS uv
-FROM mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:4bcb1b466771b1ba1ea110e2a27daea2f6093f9527fb75ee59703ec89b5561cb
+FROM ghcr.io/astral-sh/uv:0.11@sha256:440fd6477af86a2f1b38080c539f1672cd22acb1b1a47e321dba5158ab08864d AS uv
+FROM mcr.microsoft.com/devcontainers/base:ubuntu24.04@sha256:405175cbb232701dc27c47a2f178da555ea3ad20f85ea4142ad6a24f877af399
 
 ARG TZ
 ENV TZ="$TZ"
