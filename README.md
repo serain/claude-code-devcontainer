@@ -305,6 +305,21 @@ codex login status
 
 For a headless container, confirm `CODEX_ACCESS_TOKEN` or `OPENAI_API_KEY` is set on the host, then run `devc rebuild`.
 
+### Codex sandbox/bubblewrap fails with Colima
+
+If Codex sandboxing fails inside the devcontainer, for example with `codex --sandbox read-only`, and you are using Colima, the Colima VM may be restricting unprivileged user namespaces through AppArmor. SSH into the Colima VM:
+
+```bash
+colima ssh
+```
+
+Then run:
+
+```bash
+echo 'kernel.apparmor_restrict_unprivileged_userns = 0' | sudo tee /etc/sysctl.d/20-apparmor-donotrestrict.conf
+sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+```
+
 ### GitHub CLI auth not persisting
 
 The gh volume may need ownership fix:
