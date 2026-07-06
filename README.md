@@ -1,5 +1,16 @@
 # Claude Code in a devcontainer
 
+## Fork Customizations
+
+Personal fork of [trailofbits/claude-code-devcontainer](https://github.com/trailofbits/claude-code-devcontainer). Changes made here vs upstream:
+
+- Enabled `bypassPermissions` by default inside the devcontainer (`devcontainer.json`)
+- Added Tabby code-completion integration: installs the Tabby VS Code extension and auto-configures it to reach a Tabby server running on the host at `127.0.0.1:28080` via `host.docker.internal` (`devcontainer.json`, `post_install.py`)
+
+See `git log upstream/main..main` for the exact diff from upstream.
+
+---
+
 A sandboxed development environment for running Claude Code with `bypassPermissions` safely enabled. Built at [Trail of Bits](https://www.trailofbits.com/) for security audit workflows.
 
 ## Why Use This?
