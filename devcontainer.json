@@ -21,7 +21,8 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "anthropic.claude-code"
+        "anthropic.claude-code",
+        "TabbyML.vscode-tabby"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh",

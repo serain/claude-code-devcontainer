@@ -165,6 +165,30 @@ set -g status-right '%Y-%m-%d %H:%M'
     print(f"[post_install] Tmux configured: {tmux_conf}", file=sys.stderr)
 
 
+def setup_tabby_config():
+    """Point the Tabby extension at the Tabby server running on the host.
+
+    Tabby is expected to be running on the host bound to 127.0.0.1:28080
+    (see README). host.docker.internal reaches loopback-bound host services
+    on Docker Desktop and OrbStack; Colima's networking may require Tabby to
+    bind 0.0.0.0 instead.
+    """
+    config_dir = Path.home() / ".tabby-client" / "agent"
+    config_file = config_dir / "config.toml"
+
+    if config_file.exists():
+        print("[post_install] Tabby config exists, skipping", file=sys.stderr)
+        return
+
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config = """\
+[server]
+endpoint = "http://host.docker.internal:28080"
+"""
+    config_file.write_text(config, encoding="utf-8")
+    print(f"[post_install] Tabby config created: {config_file}", file=sys.stderr)
+
+
 def fix_directory_ownership():
     """Fix ownership of mounted volumes that may have root ownership."""
     uid = os.getuid()
@@ -299,6 +323,7 @@ def main():
     setup_onboarding_bypass()
     setup_claude_settings()
     setup_tmux_config()
+    setup_tabby_config()
     fix_directory_ownership()
     setup_global_gitignore()
 
