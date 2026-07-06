@@ -6,6 +6,7 @@ Personal fork of [trailofbits/claude-code-devcontainer](https://github.com/trail
 
 - Enabled `bypassPermissions` by default inside the devcontainer (`devcontainer.json`)
 - Added Tabby code-completion integration: installs the Tabby VS Code extension and auto-configures it to reach a Tabby server running on the host at `127.0.0.1:28080` via `host.docker.internal` (`devcontainer.json`, `post_install.py`)
+- Installs the Black formatter VS Code extension and sets it as the default Python formatter with format-on-save (`devcontainer.json`)
 
 See `git log upstream/main..main` for the exact diff from upstream.
 

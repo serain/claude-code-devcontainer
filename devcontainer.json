@@ -22,7 +22,8 @@
     "vscode": {
       "extensions": [
         "anthropic.claude-code",
-        "TabbyML.vscode-tabby"
+        "TabbyML.vscode-tabby",
+        "ms-python.black-formatter"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh",
@@ -39,7 +40,11 @@
         "files.insertFinalNewline": true,
         "files.trimFinalNewlines": true,
         "claudeCode.allowDangerouslySkipPermissions": true,
-        "claudeCode.initialPermissionMode": "bypassPermissions"
+        "claudeCode.initialPermissionMode": "bypassPermissions",
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.formatOnSave": true
+        }
       }
     }
   },
